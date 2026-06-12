@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Luna — Mening tarixim</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --pink: #C97AAA;
+      --pink-light: #F4C0D1;
+      --pink-bg: #FDF6FA;
+      --pink-dark: #7A2050;
+      --pink-border: #E8C8DC;
+      --text: #4A2040;
+      --text-muted: #9A6080;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--tg-theme-bg-color, var(--pink-bg));
+      color: var(--tg-theme-text-color, var(--text));
+      min-height: 100vh;
+      padding-bottom: 2rem;
+    }
+    .header {
+      background: var(--pink);
+      color: white;
+      padding: 1rem 1.25rem 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .header-logo { font-size: 24px; }
+    .header h1 { font-size: 18px; font-weight: 500; }
+    .header p { font-size: 12px; opacity: 0.85; }
+    .tabs {
+      display: flex;
+      background: white;
+      border-bottom: 1px solid var(--pink-border);
+      overflow-x: auto;
+    }
+    .tab {
+      flex: 1;
+      padding: 10px 8px;
+      border: none;
+      background: none;
+      font-size: 13px;
+      color: var(--text-muted);
+      cursor: pointer;
+      white-space: nowrap;
+      border-bottom: 2px solid transparent;
+    }
+    .tab.active {
+      color: var(--pink);
+      border-bottom-color: var(--pink);
+      font-weight: 500;
+    }
+    .page { display: none; padding: 1rem; }
+    .page.active { display: block; }
+
+    .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 1rem; }
+    .stat-card {
+      background: white;
+      border: 1px solid var(--pink-border);
+      border-radius: 14px;
+      padding: 14px 12px;
+      text-align: center;
+    }
+    .stat-label { font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
+    .stat-value { font-size: 22px; font-weight: 500; color: var(--pink-dark); }
+    .stat-unit { font-size: 11px; color: var(--text-muted); }
+
+    .ring-wrap { display: flex; justify-content: center; margin: 1rem 0; }
+    canvas.ring { max-width: 200px; }
+
+    .section-title {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text);
+      margin: 1rem 0 0.5rem;
+    }
+    .cycle-row {
+      background: white;
+      border: 1px solid var(--pink-border);
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .cycle-dates { font-size: 13px; color: var(--text); }
+    .cycle-len {
+      font-size: 12px;
+      background: var(--pink-light);
+      color: var(--pink-dark);
+      padding: 3px 10px;
+      border-radius: 20px;
+    }
+
+    .calendar-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 4px;
+      text-align: center;
+    }
+    .cal-day-name { font-size: 10px; color: var(--text-muted); padding: 4px 0; }
+    .cal-day {
+      font-size: 12px;
+      padding: 6px 2px;
+      border-radius: 50%;
+      aspect-ratio: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .cal-day.period { background: var(--pink); color: white; }
+    .cal-day.ovulation { background: #FFD6E7; color: var(--pink-dark); border: 1px solid var(--pink); }
+    .cal-day.pms { background: #E8D5F5; color: #6B3FA0; }
+    .cal-day.today { font-weight: 600; border: 1.5px solid var(--pink); }
+    .cal-day.empty { opacity: 0; }
+
+    .legend { display: flex; gap: 12px; flex-wrap: wrap; margin: 0.75rem 0; }
+    .leg { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-muted); }
+    .leg-dot { width: 10px; height: 10px; border-radius: 50%; }
+
+    .loading { text-align: center; padding: 3rem 1rem; color: var(--text-muted); font-size: 14px; }
+    .chart-wrap { background: white; border: 1px solid var(--pink-border); border-radius: 14px; padding: 12px; margin-bottom: 1rem; }
+    .chart-title { font-size: 13px; color: var(--text-muted); margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-logo">🌸</div>
+  <div>
+    <h1>Luna</h1>
+    <p id="header-sub">Yuklanmoqda...</p>
+  </div>
+</div>
+
+<div class="tabs">
+  <button class="tab active" onclick="showTab('overview')">✨ Umumiy</button>
+  <button class="tab" onclick="showTab('calendar')">📅 Kalendar</button>
+  <button class="tab" onclick="showTab('history')">📋 Tarix</button>
+  <button class="tab" onclick="showTab('mood')">💕 Kayfiyat</button>
+</div>
+
+<div id="tab-overview" class="page active">
+  <div id="overview-content" class="loading">Yuklanmoqda 🌸</div>
+</div>
+<div id="tab-calendar" class="page">
+  <div id="calendar-content" class="loading">Yuklanmoqda 🌸</div>
+</div>
+<div id="tab-history" class="page">
+  <div id="history-content" class="loading">Yuklanmoqda 🌸</div>
+</div>
+<div id="tab-mood" class="page">
+  <div id="mood-content" class="loading">Yuklanmoqda 🌸</div>
+</div>
+
+<script>
+const tg = window.Telegram.WebApp;
+tg.ready();
+tg.expand();
+
+const userId = tg.initDataUnsafe?.user?.id;
+const API_BASE = window.location.origin;
+
+let DATA = null;
+
+async function loadData() {
+  if (!userId) {
+    document.getElementById('overview-content').innerHTML = '<p style="text-align:center;padding:2rem;color:#C97AAA">Telegram orqali oching 🌸</p>';
+    return;
+  }
+  try {
+    const res = await fetch(`${API_BASE}/api/user/${userId}/data`, {
+      headers: { 'X-Secret': tg.initData }
+    });
+    DATA = await res.json();
+    renderAll();
+  } catch(e) {
+    document.getElementById('overview-content').innerHTML = '<p style="text-align:center;padding:2rem">Xatolik yuz berdi 🥺</p>';
+  }
+}
+
+function showTab(name) {
+  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', ['overview','calendar','history','mood'][i] === name));
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+}
+
+function fmt(dateStr) {
+  if (!dateStr) return '—';
+  const d = new Date(dateStr);
+  return d.toLocaleDateString('uz-UZ', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+function daysUntil(dateStr) {
+  if (!dateStr) return null;
+  const diff = Math.ceil((new Date(dateStr) - new Date()) / 86400000);
+  return diff;
+}
+
+function renderAll() {
+  if (!DATA) return;
+  renderOverview();
+  renderCalendar();
+  renderHistory();
+  renderMood();
+}
+
+function renderOverview() {
+  const { user, predictions, cycles } = DATA;
+  const nextDays = daysUntil(predictions.next_period);
+  const ovDays = daysUntil(predictions.ovulation);
+
+  const ringPct = nextDays != null ? Math.max(0, Math.min(100, Math.round((1 - nextDays / user.avg_cycle_length) * 100))) : 0;
+  document.getElementById('header-sub').textContent = nextDays != null
+    ? (nextDays > 0 ? `${nextDays} kundan keyin sehrli kunlar` : 'Sehrli kunlar boshlandi!')
+    : 'Ma\'lumot yo\'q';
+
+  document.getElementById('overview-content').innerHTML = `
+    <div class="ring-wrap">
+      <canvas id="ringChart" class="ring" width="200" height="200"></canvas>
+    </div>
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-label">O'rtacha sikl</div>
+        <div class="stat-value">${user.avg_cycle_length}</div>
+        <div class="stat-unit">kun</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Sehrli kunlar</div>
+        <div class="stat-value">${user.avg_period_length}</div>
+        <div class="stat-unit">kun</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Keyingi ✨</div>
+        <div class="stat-value" style="font-size:15px">${fmt(predictions.next_period)}</div>
+        <div class="stat-unit">${nextDays != null ? (nextDays > 0 ? nextDays + ' kun' : 'Bugun!') : '—'}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Nur kuni 💫</div>
+        <div class="stat-value" style="font-size:15px">${fmt(predictions.ovulation)}</div>
+        <div class="stat-unit">${ovDays != null ? (ovDays > 0 ? ovDays + ' kun' : 'Bugun!') : '—'}</div>
+      </div>
+    </div>
+    <p style="text-align:center;font-size:12px;color:var(--text-muted);margin-top:0.5rem">
+      Jami kuzatilgan: <b>${cycles.length}</b> ta sikl
+    </p>
+  `;
+
+  const ctx = document.getElementById('ringChart').getContext('2d');
+  new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      datasets: [{
+        data: [ringPct, 100 - ringPct],
+        backgroundColor: ['#C97AAA', '#F4C0D1'],
+        borderWidth: 0,
+      }]
+    },
+    options: {
+      cutout: '72%',
+      plugins: {
+        legend: { display: false },
+        tooltip: { enabled: false },
+      },
+    },
+    plugins: [{
+      id: 'center',
+      beforeDraw(chart) {
+        const { ctx, chartArea: { width, height, left, top } } = chart;
+        ctx.save();
+        ctx.font = '500 28px -apple-system, sans-serif';
+        ctx.fillStyle = '#7A2050';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(ringPct + '%', left + width / 2, top + height / 2 - 8);
+        ctx.font = '12px -apple-system, sans-serif';
+        ctx.fillStyle = '#9A6080';
+        ctx.fillText('sikl', left + width / 2, top + height / 2 + 18);
+        ctx.restore();
+      }
+    }]
+  });
+}
+
+function renderCalendar() {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = today.getMonth();
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  const periodDates = new Set();
+  const { cycles, predictions } = DATA;
+  cycles.forEach(c => {
+    if (!c.end_date) return;
+    let d = new Date(c.start_date);
+    const end = new Date(c.end_date);
+    while (d <= end) {
+      if (d.getFullYear() === year && d.getMonth() === month)
+        periodDates.add(d.getDate());
+      d.setDate(d.getDate() + 1);
+    }
+  });
+
+  const ovDate = predictions.ovulation ? new Date(predictions.ovulation) : null;
+  const pmsDate = predictions.pms_start ? new Date(predictions.pms_start) : null;
+  const nextPeriod = predictions.next_period ? new Date(predictions.next_period) : null;
+
+  const dayNames = ['Du', 'Se', 'Ch', 'Pe', 'Ju', 'Sh', 'Ya'];
+  let html = `
+    <div class="legend">
+      <span class="leg"><span class="leg-dot" style="background:#C97AAA"></span>Sehrli kunlar</span>
+      <span class="leg"><span class="leg-dot" style="background:#FFD6E7;border:1px solid #C97AAA"></span>Nur kuni</span>
+      <span class="leg"><span class="leg-dot" style="background:#E8D5F5"></span>PMS</span>
+    </div>
+    <div class="calendar-grid">
+  `;
+  dayNames.forEach(d => html += `<div class="cal-day-name">${d}</div>`);
+
+  const startPad = (firstDay + 6) % 7;
+  for (let i = 0; i < startPad; i++) html += `<div class="cal-day empty"></div>`;
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const cur = new Date(year, month, d);
+    let cls = 'cal-day';
+    if (periodDates.has(d)) cls += ' period';
+    else if (nextPeriod && cur >= nextPeriod && cur < new Date(nextPeriod.getTime() + DATA.user.avg_period_length * 86400000)) cls += ' period';
+    else if (ovDate && cur.toDateString() === ovDate.toDateString()) cls += ' ovulation';
+    else if (pmsDate && cur >= pmsDate && ovDate && cur <= ovDate) cls += ' pms';
+    if (cur.toDateString() === today.toDateString()) cls += ' today';
+    html += `<div class="${cls}">${d}</div>`;
+  }
+  html += '</div>';
+  document.getElementById('calendar-content').innerHTML = html;
+}
+
+function renderHistory() {
+  const { cycles } = DATA;
+  if (!cycles.length) {
+    document.getElementById('history-content').innerHTML = '<p style="text-align:center;padding:2rem;color:var(--text-muted)">Hali sikl yo\'q 🌸</p>';
+    return;
+  }
+  let html = '<p class="section-title">Sikl tarixi</p>';
+  cycles.slice(0, 12).forEach((c, i) => {
+    html += `
+      <div class="cycle-row">
+        <div class="cycle-dates">
+          <div style="font-size:13px">${fmt(c.start_date)} → ${c.end_date ? fmt(c.end_date) : '...'}</div>
+          <div style="font-size:11px;color:var(--text-muted)">${i + 1}-sikl</div>
+        </div>
+        ${c.cycle_length ? `<span class="cycle-len">${c.cycle_length} kun</span>` : ''}
+      </div>
+    `;
+  });
+  document.getElementById('history-content').innerHTML = html;
+}
+
+function renderMood() {
+  const { symptoms } = DATA;
+  if (!symptoms.length) {
+    document.getElementById('mood-content').innerHTML = '<p style="text-align:center;padding:2rem;color:var(--text-muted)">Hali simptom yo\'q 🌸</p>';
+    return;
+  }
+  const last30 = symptoms.slice(0, 30).reverse();
+  const labels = last30.map(s => s.date.slice(5));
+  const pain = last30.map(s => s.pain_level || 0);
+  const moodMap = { happy: 5, normal: 3, tired: 2, sad: 1, irritable: 1 };
+  const moodVals = last30.map(s => moodMap[s.mood] || 0);
+
+  document.getElementById('mood-content').innerHTML = `
+    <div class="chart-wrap">
+      <div class="chart-title">Og'riq darajasi (so'nggi 30 kun)</div>
+      <canvas id="painChart" height="120"></canvas>
+    </div>
+    <div class="chart-wrap">
+      <div class="chart-title">Kayfiyat dinamikasi</div>
+      <canvas id="moodChart" height="120"></canvas>
+    </div>
+  `;
+  new Chart(document.getElementById('painChart'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{ data: pain, backgroundColor: '#F4C0D1', borderRadius: 4, borderSkipped: false }]
+    },
+    options: { plugins: { legend: { display: false } }, scales: { y: { max: 5, min: 0, ticks: { stepSize: 1 } } } }
+  });
+  new Chart(document.getElementById('moodChart'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{ data: moodVals, borderColor: '#C97AAA', backgroundColor: 'rgba(201,122,170,0.1)', tension: 0.4, fill: true, pointRadius: 3 }]
+    },
+    options: { plugins: { legend: { display: false } }, scales: { y: { max: 5, min: 0, ticks: { stepSize: 1 } } } }
+  });
+}
+
+loadData();
+</script>
+</body>
+</html>
